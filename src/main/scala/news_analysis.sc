@@ -1,13 +1,10 @@
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.ml.clustering.KMeans
-import org.apache.spark.ml.feature.{StopWordsRemover, Tokenizer}
+import org.apache.spark.ml.feature.{StopWordsRemover, RegexTokenizer}
 import org.apache.spark.sql.functions._
-import edu.stanford.nlp.simple.{Document, Sentence}
-import edu.stanford.nlp.pipeline.{Annotation, StanfordCoreNLP}
+import edu.stanford.nlp.simple.Document
 import org.apache.spark.sql.functions.udf
-
 import scala.collection.JavaConversions._
-import java.util.Properties
 
 val spark = SparkSession
   .builder().master("local")
@@ -19,8 +16,8 @@ val sqlContext = spark.sqlContext
 
 import sqlContext.implicits._
 
-val tokenizer = new Tokenizer().setInputCol("text").setOutputCol("words")
-val stopwords = new StopWordsRemover().setInputCol("words").setOutputCol("filteredWords")
+val tokenizer = new RegexTokenizer().setInputCol("wordsCleaned").setOutputCol("tokens")
+val stopwords = new StopWordsRemover().setInputCol("tokens").setOutputCol("filteredTokens")
 
 val lemmatizer = udf((s: String) => {
   val doc = new Document(s)
@@ -29,13 +26,15 @@ val lemmatizer = udf((s: String) => {
 
 val jezebel = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebeltest.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
-  .withColumn("lemmatized", lemmatizer($"text"))
-  .withColumn("textLower", regexp_replace($"lemmatized", """[\p{Punct}]|[^\x00-\x7F]|\s{2,}?""", ""))
-  .drop("text")
-  .withColumnRenamed("textLower", "text")
   .drop("_id")
+  .withColumn("lemmatized", lemmatizer($"text"))
+  .drop("text")
+  .withColumn("wordsCleaned", regexp_replace($"lemmatized", """[\p{Punct}]|[^\x00-\x7F]|\s{2,}?""", ""))
+  .drop("lemmatized")
 
 val jezTokens = stopwords.transform(tokenizer.transform(jezebel))
+  .drop("tokens")
+  .drop("wordsCleaned")
 
 jezTokens.printSchema()
-jezTokens.select("filteredWords").head(1)
+val lst = jezTokens.first().getList[String](5)
