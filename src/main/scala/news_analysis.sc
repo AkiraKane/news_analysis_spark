@@ -1,5 +1,5 @@
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.ml.clustering.{KMeans, LDA}
+import org.apache.spark.ml.clustering.LDA
 import org.apache.spark.ml.feature.{CountVectorizer, RegexTokenizer, StopWordsRemover}
 import org.apache.spark.sql.functions._
 import edu.stanford.nlp.simple.Document
@@ -27,26 +27,32 @@ val lemmatizer = udf((s: String) => {
   doc.sentences().map(_.lemmas()).map(_.mkString(" ")).mkString(" ")
 })
 
+val vox = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebeltest.jsonl")
+  .withColumn("id", $"_id".getField("$oid"))
+  .drop("_id")
+
 val jezebel = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebeltest.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
+
+val news = jezebel.union(vox)
   .withColumn("lemmatized", lemmatizer($"text"))
   .drop("text")
   .withColumn("wordsCleaned", regexp_replace($"lemmatized", """[\p{Punct}]|[^\x00-\x7F]|\s{2,}?""", ""))
   .drop("lemmatized")
 
-val jezTokens = stopwords.transform(tokenizer.transform(jezebel))
+val newsTokens = stopwords.transform(tokenizer.transform(news))
   .drop("tokens")
   .drop("wordsCleaned")
 
-val vectorized = countVectorizer.fit(jezTokens)
+val vectorized = countVectorizer.fit(newsTokens)
 val vocab = vectorized.vocabulary
-val model = lda.fit(vectorized.transform(jezTokens))
+val model = lda.fit(vectorized.transform(newsTokens))
 
 def topicAccessor (vocabulary: Array[String]) = udf((indices: Array[Int]) => indices.map(i => vocabulary(i)))
 
 val topics = model.describeTopics()
-  .withColumn("terms", topicAccessor(vocab)($"termIndices"))
   .drop("termWeights")
+//  .withColumn("terms", topicAccessor(vocab)($"termIndices"))
 
 topics.show(false)
