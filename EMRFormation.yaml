@@ -1,0 +1,171 @@
+---
+Resources:
+  EMR:
+    Type: AWS::EMR::Cluster
+    Properties:
+      LogUri: !GetAtt S3LogBucket.DualStackDomainName
+      Name: NewsAnalysis
+      ReleaseLabel: emr-5.4.0
+      JobFlowRole:
+        Ref: InstanceProfile
+      ServiceRole:
+        Ref: EMRRole
+      Applications:
+      - Name: Spark
+        Version: 2.10
+      - Name: Zeppelin
+        Version: 0.7.0
+      Instances:
+        CoreInstanceGroup:
+          BidPrice: .07
+          InstanceCount: 4
+          InstanceType: c4.xlarge
+          Market: Spot
+          Name: Slave
+        MasterInstanceGroup:
+          BidPrice: .07
+          InstanceCount: 1
+          InstanceType: c4.xlarge
+          Market: Spot
+          Name: Master
+        Ec2KeyName: selfie-art-us-east.pem
+        Ec2SubnetId:
+          Ref: PublicSubnet
+        EmrManagedMasterSecurityGroup:
+          Ref: PublicSecGroup
+        EmrManagedSlaveSecurityGroup:
+          Ref: PublicSecGroup
+        HadoopVersion: 2.7.3
+  Vpc:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+  PublicSubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId:
+        Ref: Vpc
+      AvailabilityZone: us-east-1d
+      CidrBlock: 10.0.0.0/24
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: Vpc
+      InternetGatewayId:
+        Ref: InternetGateway
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Vpc
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+  RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet
+      RouteTableId:
+        Ref: RouteTable
+  AclAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet
+      NetworkAclId:
+        Fn::GetAtt: [Vpc, DefaultNetworkAcl]
+  PublicSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enable HTTP ingress"
+      VpcId:
+        Ref: Vpc
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 8000
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: -1
+        FromPort: 2049
+        ToPort: 2049
+        CidrIp: 0.0.0.0/0
+  S3LogBucket:
+    Type: AWS::S3::Bucket
+  InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles:
+      - !Ref InstanceRole
+  InstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - ec2.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:
+            - "arn:aws:s3:::warren-datasets"
+            - "arn:aws:s3:::warren-datasets/*"
+            - Fn::Join:
+              - ""
+              - - "arn:aws:s3:::"
+                - Ref: S3LogBucket
+  EMRRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Poperties:
+        AssumeRolePolicyDocument:
+          Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - emr.amazonaws.com
+            Action:
+            - sts:AssumeRole
+          Policies:
+          - PolicyName: IAMUser
+            PolicyDocument:
+              Statement:
+              - Effect: Allow
+                Action:
+                - iam:CreateRole
+                - iam:PutRolePolicy
+                - iam:CreateInstanceProfile
+                - iam:AddRoleToInstanceProfile
+                - iam:ListRoles
+                - iam:GetPolicy
+                - iam:GetInstanceProfile
+                - iam:GetPolicyVersion
+                - iam:AttachRolePolicy
+                - iam:PassRole
+                Resource: "*"
+          - PolicyName: Ec2PowerUser
+            PolicyDocument:
+              Statement:
+              - Effect: Allow
+                Action:
+                - ec2:*
+                Resource: "*"

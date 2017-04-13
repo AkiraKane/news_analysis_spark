@@ -4,8 +4,8 @@ import org.apache.spark.ml.feature.{CountVectorizer, RegexTokenizer, StopWordsRe
 import org.apache.spark.sql.functions._
 import edu.stanford.nlp.simple.Document
 import org.apache.spark.sql.functions.udf
-
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 val spark = SparkSession
   .builder().master("local")
@@ -20,20 +20,21 @@ import sqlContext.implicits._
 val tokenizer = new RegexTokenizer().setInputCol("wordsCleaned").setOutputCol("tokens")
 val stopwords = new StopWordsRemover().setInputCol("tokens").setOutputCol("filteredTokens")
 val countVectorizer = new CountVectorizer().setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
-val lda = new LDA().setK(5).setMaxIter(2)
+val lda = new LDA().setK(26).setMaxIter(10)
 
 val lemmatizer = udf((s: String) => {
   val doc = new Document(s)
   doc.sentences().map(_.lemmas()).map(_.mkString(" ")).mkString(" ")
 })
 
-val vox = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebeltest.jsonl")
+val vox = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/vox.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
 
-val jezebel = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebeltest.jsonl")
+val jezebel = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebel.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
+  .sample(withReplacement = false, .2)
 
 val news = jezebel.union(vox)
   .withColumn("lemmatized", lemmatizer($"text"))
@@ -49,10 +50,11 @@ val vectorized = countVectorizer.fit(newsTokens)
 val vocab = vectorized.vocabulary
 val model = lda.fit(vectorized.transform(newsTokens))
 
-def topicAccessor (vocabulary: Array[String]) = udf((indices: Array[Int]) => indices.map(i => vocabulary(i)))
+def topicAccessor (vocabulary: Array[String]) = udf((indices: mutable.WrappedArray[Int]) => indices.map(i => vocabulary(i)))
 
 val topics = model.describeTopics()
   .drop("termWeights")
-//  .withColumn("terms", topicAccessor(vocab)($"termIndices"))
+  .withColumn("terms", topicAccessor(vocab)($"termIndices"))
+  .drop("termIndicies")
 
 topics.show(false)
