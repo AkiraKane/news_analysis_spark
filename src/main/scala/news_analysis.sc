@@ -1,9 +1,10 @@
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.ml.clustering.KMeans
-import org.apache.spark.ml.feature.{StopWordsRemover, RegexTokenizer}
+import org.apache.spark.ml.clustering.{KMeans, LDA}
+import org.apache.spark.ml.feature.{CountVectorizer, RegexTokenizer, StopWordsRemover}
 import org.apache.spark.sql.functions._
 import edu.stanford.nlp.simple.Document
 import org.apache.spark.sql.functions.udf
+
 import scala.collection.JavaConversions._
 
 val spark = SparkSession
@@ -18,6 +19,8 @@ import sqlContext.implicits._
 
 val tokenizer = new RegexTokenizer().setInputCol("wordsCleaned").setOutputCol("tokens")
 val stopwords = new StopWordsRemover().setInputCol("tokens").setOutputCol("filteredTokens")
+val countVectorizer = new CountVectorizer().setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
+val lda = new LDA().setK(5).setMaxIter(2)
 
 val lemmatizer = udf((s: String) => {
   val doc = new Document(s)
@@ -36,5 +39,14 @@ val jezTokens = stopwords.transform(tokenizer.transform(jezebel))
   .drop("tokens")
   .drop("wordsCleaned")
 
-jezTokens.printSchema()
-val lst = jezTokens.first().getList[String](5)
+val vectorized = countVectorizer.fit(jezTokens)
+val vocab = vectorized.vocabulary
+val model = lda.fit(vectorized.transform(jezTokens))
+
+def topicAccessor (vocabulary: Array[String]) = udf((indices: Array[Int]) => indices.map(i => vocabulary(i)))
+
+val topics = model.describeTopics()
+  .withColumn("terms", topicAccessor(vocab)($"termIndices"))
+  .drop("termWeights")
+
+topics.show(false)
