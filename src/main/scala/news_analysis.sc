@@ -17,34 +17,42 @@ val sqlContext = spark.sqlContext
 
 import sqlContext.implicits._
 
-val tokenizer = new RegexTokenizer().setInputCol("wordsCleaned").setOutputCol("tokens")
-val stopwords = new StopWordsRemover().setInputCol("tokens").setOutputCol("filteredTokens")
-val countVectorizer = new CountVectorizer().setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
-val lda = new LDA().setK(26).setMaxIter(10)
+val tokenizer = new RegexTokenizer()
+  .setInputCol("wordsCleaned").setOutputCol("tokens")
+val stopWordRemover = new StopWordsRemover()
+  .setInputCol("tokens").setOutputCol("filteredTokens")
+val stopwords = stopWordRemover.getStopWords ++ Array("say", "would", "one")
+stopWordRemover.setStopWords(stopwords)
+val countVectorizer = new CountVectorizer()
+  .setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
+val lda = new LDA().setK(20).setMaxIter(30)
 
 val lemmatizer = udf((s: String) => {
   val doc = new Document(s)
   doc.sentences().map(_.lemmas()).map(_.mkString(" ")).mkString(" ")
 })
 
-val vox = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/vox.jsonl")
+val vox = spark.read.option("charset", "ascii")
+  .json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/vox.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
 
-val jezebel = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebel.jsonl")
+val jezebel = spark.read.option("charset", "ascii")
+  .json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebel.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
   .sample(withReplacement = false, .2)
 
+val regexString ="""[\p{Punct}]|[^\x00-\x7F]|\s{2,}?|advertisement|lrb|lcb|rcb|lsb|rsb|rrb"""
 val news = jezebel.union(vox)
   .withColumn("textNoHttp", regexp_replace($"text", """http.*\s$""", ""))
   .withColumn("lemmatized", lemmatizer($"textNoHttp"))
   .drop("textNoHttp")
   .drop("text")
-  .withColumn("wordsCleaned", regexp_replace($"lemmatized", """[\p{Punct}]|[^\x00-\x7F]|\s{2,}?|lrb|rrb""", ""))
+  .withColumn("wordsCleaned", regexp_replace($"lemmatized", regexString, ""))
   .drop("lemmatized")
 
-val newsTokens = stopwords.transform(tokenizer.transform(news))
+val newsTokens = stopWordRemover.transform(tokenizer.transform(news))
   .drop("tokens")
   .drop("wordsCleaned")
 
@@ -52,7 +60,8 @@ val vectorized = countVectorizer.fit(newsTokens)
 val vocab = vectorized.vocabulary
 val model = lda.fit(vectorized.transform(newsTokens))
 
-def topicAccessor (vocabulary: Array[String]) = udf((indices: mutable.WrappedArray[Int]) => indices.map(i => vocabulary(i)))
+def topicAccessor(vocabulary: Array[String]) =
+  udf((indices: mutable.WrappedArray[Int]) => indices.map(i => vocabulary(i)))
 
 val topics = model.describeTopics()
   .drop("termWeights")
