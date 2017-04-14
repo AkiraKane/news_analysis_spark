@@ -37,9 +37,11 @@ val jezebel = spark.read.option("charset", "ascii").json("/Users/warren/Desktop/
   .sample(withReplacement = false, .2)
 
 val news = jezebel.union(vox)
-  .withColumn("lemmatized", lemmatizer($"text"))
+  .withColumn("textNoHttp", regexp_replace($"text", """http.*\s$""", ""))
+  .withColumn("lemmatized", lemmatizer($"textNoHttp"))
+  .drop("textNoHttp")
   .drop("text")
-  .withColumn("wordsCleaned", regexp_replace($"lemmatized", """[\p{Punct}]|[^\x00-\x7F]|\s{2,}?""", ""))
+  .withColumn("wordsCleaned", regexp_replace($"lemmatized", """[\p{Punct}]|[^\x00-\x7F]|\s{2,}?|lrb|rrb""", ""))
   .drop("lemmatized")
 
 val newsTokens = stopwords.transform(tokenizer.transform(news))
