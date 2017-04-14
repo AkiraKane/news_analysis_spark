@@ -3,7 +3,11 @@ Resources:
   EMR:
     Type: AWS::EMR::Cluster
     Properties:
-      LogUri: !GetAtt S3LogBucket.DualStackDomainName
+      LogUri:
+        Fn::Join:
+        - ""
+        - - s3://
+          - Ref: S3LogBucket
       Name: NewsAnalysis
       ReleaseLabel: emr-5.4.0
       JobFlowRole:
@@ -12,23 +16,21 @@ Resources:
         Ref: EMRRole
       Applications:
       - Name: Spark
-        Version: 2.10
       - Name: Zeppelin
-        Version: 0.7.0
       Instances:
         CoreInstanceGroup:
           BidPrice: .07
           InstanceCount: 4
           InstanceType: c4.xlarge
-          Market: Spot
+          Market: SPOT
           Name: Slave
         MasterInstanceGroup:
           BidPrice: .07
           InstanceCount: 1
           InstanceType: c4.xlarge
-          Market: Spot
+          Market: SPOT
           Name: Master
-        Ec2KeyName: selfie-art-us-east.pem
+        Ec2KeyName: selfie-art-us-east
         Ec2SubnetId:
           Ref: PublicSubnet
         EmrManagedMasterSecurityGroup:
@@ -136,36 +138,35 @@ Resources:
   EMRRole:
     Type: AWS::IAM::Role
     Properties:
-      Poperties:
-        AssumeRolePolicyDocument:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - elasticmapreduce.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: IAMUser
+        PolicyDocument:
           Statement:
           - Effect: Allow
-            Principal:
-              Service:
-              - emr.amazonaws.com
             Action:
-            - sts:AssumeRole
-          Policies:
-          - PolicyName: IAMUser
-            PolicyDocument:
-              Statement:
-              - Effect: Allow
-                Action:
-                - iam:CreateRole
-                - iam:PutRolePolicy
-                - iam:CreateInstanceProfile
-                - iam:AddRoleToInstanceProfile
-                - iam:ListRoles
-                - iam:GetPolicy
-                - iam:GetInstanceProfile
-                - iam:GetPolicyVersion
-                - iam:AttachRolePolicy
-                - iam:PassRole
-                Resource: "*"
-          - PolicyName: Ec2PowerUser
-            PolicyDocument:
-              Statement:
-              - Effect: Allow
-                Action:
-                - ec2:*
-                Resource: "*"
+            - iam:CreateRole
+            - iam:PutRolePolicy
+            - iam:CreateInstanceProfile
+            - iam:AddRoleToInstanceProfile
+            - iam:ListRoles
+            - iam:GetPolicy
+            - iam:GetInstanceProfile
+            - iam:GetPolicyVersion
+            - iam:AttachRolePolicy
+            - iam:PassRole
+            Resource: "*"
+      - PolicyName: Ec2PowerUser
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:*
+            Resource: "*"
