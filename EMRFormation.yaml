@@ -17,6 +17,10 @@ Resources:
       Applications:
       - Name: Spark
       - Name: Zeppelin
+      BootstrapActions:
+      - Name: GetCoreNLPJars
+        ScriptBootstrapAction:
+          Path: s3://warren-datasets/EmrBootstrap.sh
       Instances:
         CoreInstanceGroup:
           BidPrice: .07

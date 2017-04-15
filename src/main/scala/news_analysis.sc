@@ -22,11 +22,11 @@ val tokenizer = new RegexTokenizer()
 val stopWordRemover = new StopWordsRemover()
   .setInputCol("tokens").setOutputCol("filteredTokens")
 val stopwords = stopWordRemover.getStopWords ++ Array("say", "would", "one", "make", "like", "get", "go", "also",
-  "could", "even", "use")
-stopWordRemover.setStopWords(stopwords)
+  "could", "even", "use", "thing", "way", "see")
+val stopWordsRemover = stopWordRemover.setStopWords(stopwords)
 val countVectorizer = new CountVectorizer()
   .setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
-val lda = new LDA().setK(20).setMaxIter(30)
+val lda = new LDA().setK(25).setMaxIter(30)
 
 val lemmatizer = udf((s: String) => {
   val doc = new Document(s)
@@ -42,11 +42,10 @@ val jezebel = spark.read.option("charset", "ascii")
   .json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebel.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
-  .sample(withReplacement = false, .2)
 
-val regexString ="""[\p{Punct}]|[^\x00-\x7F]|\s{2,}?|advertisement|lrb|lcb|rcb|lsb|rsb|rrb"""
+val regexString ="""[\p{Punct}]|[^\x00-\x7F]|\s{2,}?|lrb|lcb|rcb|lsb|rsb|rrb"""
 val news = jezebel.union(vox)
-  .withColumn("textNoHttp", regexp_replace($"text", """http.*\s$""", ""))
+  .withColumn("textNoHttp", regexp_replace($"text", """http.*\s$|document[a-z]+|[a-z]*advertisement[a-z]*""", ""))
   .withColumn("lemmatized", lemmatizer($"textNoHttp"))
   .drop("textNoHttp")
   .drop("text")
