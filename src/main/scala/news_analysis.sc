@@ -34,12 +34,12 @@ val lemmatizer = udf((s: String) => {
 })
 
 val vox = spark.read.option("charset", "ascii")
-  .json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/vox.jsonl")
+  .json("s3://warren-datasets/vox.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
 
 val jezebel = spark.read.option("charset", "ascii")
-  .json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebel.jsonl")
+  .json("s3://warren-datasets/jezebel.jsonl")
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
 

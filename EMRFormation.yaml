@@ -18,20 +18,20 @@ Resources:
       - Name: Spark
       - Name: Zeppelin
       BootstrapActions:
-      - Name: GetCoreNLPJars
+      - Name: GetCoreNLPJarsK
         ScriptBootstrapAction:
           Path: s3://warren-datasets/EmrBootstrap.sh
       Instances:
         CoreInstanceGroup:
-          BidPrice: .07
-          InstanceCount: 4
-          InstanceType: c4.xlarge
+          BidPrice: .3
+          InstanceCount: 6
+          InstanceType: m4.4xlarge
           Market: SPOT
           Name: Slave
         MasterInstanceGroup:
           BidPrice: .07
           InstanceCount: 1
-          InstanceType: c4.xlarge
+          InstanceType: m4.xlarge
           Market: SPOT
           Name: Master
         Ec2KeyName: selfie-art-us-east
