@@ -48,7 +48,7 @@ Resources:
           spark.executor.memory: 16g
           spark.executor.instances: 18
           spark.executor.cores: 5
-          spark.default.parallelism: 18
+          spark.default.parallelism: 288
       - Classification: capacity-scheduler
         ConfigurationProperties:
           yarn.scheduler.capacity.resource-calculator: org.apache.hadoop.yarn.util.resource.DominantResourceCalculator
