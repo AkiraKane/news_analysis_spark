@@ -23,13 +23,14 @@ val tokenizer = new RegexTokenizer()
 val stopWordRemover = new StopWordsRemover()
   .setInputCol("tokens").setOutputCol("filteredTokens")
 val stopwords = stopWordRemover.getStopWords ++ Array("say", "would", "one", "make", "like", "get", "go", "also",
-  "could", "even", "use", "thing", "way", "see")
+  "could", "even", "use", "thing", "way", "see", "l", "var", "el")
 val stopWordsRemover = stopWordRemover.setStopWords(stopwords)
 val countVectorizer = new CountVectorizer()
   .setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
 val norm = new Normalizer().setInputCol("topicDistribution").setOutputCol("topicDistNorm")
 val pca = new PCA().setInputCol("topicDistNorm").setOutputCol("topics2d").setK(2)
-val lda = new LDA().setK(13).setMaxIter(20)
+val lda = new LDA().setK(18).setMaxIter(60)
+// optimal number thus far: 17
 
 val lemmatizer = udf((s: String) => {
   val doc = new Document(s)
@@ -56,14 +57,14 @@ val news = jezebel.union(vox)
   .drop("textNoHttp")
   .drop("text")
   .withColumn("wordsCleaned", regexp_replace($"lemmatized", regexString, ""))
-  .drop("lemmatized").repartition(18)
+  .drop("lemmatized").repartition(90)
 
 val newsTokens = stopWordRemover.transform(tokenizer.transform(news))
   .drop("tokens")
   .drop("wordsCleaned")
 
 val vectorizeFit = countVectorizer.fit(newsTokens)
-val vectorizeTransform = vectorizeFit.transform(newsTokens).drop('filteredTokens).repartition(18)
+val vectorizeTransform = vectorizeFit.transform(newsTokens).drop('filteredTokens)
 val model = lda.fit(vectorizeTransform)
 val modelTransform = model.transform(vectorizeTransform)
   .withColumn("maxTopic", maxTopic($"topicDistribution")).drop('features).drop('url).drop('author)
