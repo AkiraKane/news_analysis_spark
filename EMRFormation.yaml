@@ -23,13 +23,13 @@ Resources:
           Path: s3://warren-datasets/EmrBootstrap.sh
       Instances:
         CoreInstanceGroup:
-          BidPrice: .3
+          BidPrice: .27
           InstanceCount: 6
           InstanceType: m4.4xlarge
           Market: SPOT
           Name: Slave
         MasterInstanceGroup:
-          BidPrice: .07
+          BidPrice: .1
           InstanceCount: 1
           InstanceType: m4.xlarge
           Market: SPOT
@@ -42,6 +42,20 @@ Resources:
         EmrManagedSlaveSecurityGroup:
           Ref: PublicSecGroup
         HadoopVersion: 2.7.3
+      Configurations:
+      - Classifiation: spark-defaults
+        Properties:
+          spark.executor.memory: 16g
+          spark.executor.instances: 18
+          spark.executor.cores: 5
+          spark.default.parallelism: 18
+      - Classification: capacity-scheduler
+        Properties:
+          yarn.scheduler.capacity.resource-calculator: org.apache.hadoop.yarn.util.resource.DominantResourceCalculator
+      - Classification: yarn-site
+        Properties:
+          yarn.nodemanager.resource.memory-mb: 64512
+          yarn.nodemanager.resource.cpu-vcores: 15
   Vpc:
     Type: "AWS::EC2::VPC"
     Properties:

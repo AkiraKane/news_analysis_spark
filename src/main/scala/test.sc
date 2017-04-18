@@ -1,6 +1,6 @@
 
 
-
+import org.apache.spark.mllib.optimization.Gradient
 
 def indexOfLargest(array: Seq[Int]) = {
   val result = array.foldLeft(-1,Int.MinValue,0) {

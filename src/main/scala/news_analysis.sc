@@ -29,7 +29,7 @@ val countVectorizer = new CountVectorizer()
   .setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
 val norm = new Normalizer().setInputCol("topicDistribution").setOutputCol("topicDistNorm")
 val pca = new PCA().setInputCol("topicDistNorm").setOutputCol("topics2d").setK(2)
-val lda = new LDA().setK(10).setMaxIter(2)
+val lda = new LDA().setK(13).setMaxIter(20)
 
 val lemmatizer = udf((s: String) => {
   val doc = new Document(s)
@@ -42,11 +42,11 @@ val maxTopic = udf((topicVector: Vector) => {
 })
 
 val vox = spark.read.option("charset", "ascii")
-  .parquet("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/voxtest.pqt")
+  .json("s3://warren-datasets/vox.jsonl")
   .withColumn("org", lit("vox"))
 
 val jezebel = spark.read.option("charset", "ascii")
-  .parquet("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebeltest.pqt")
+  .json("s3://warren-datasets/jezebel.jsonl")
   .withColumn("org", lit("jezebel"))
 
 val regexString ="""[\p{Punct}]|[^\x00-\x7F]|\s{2,}?|lrb|lcb|rcb|lsb|rsb|rrb"""
@@ -56,19 +56,19 @@ val news = jezebel.union(vox)
   .drop("textNoHttp")
   .drop("text")
   .withColumn("wordsCleaned", regexp_replace($"lemmatized", regexString, ""))
-  .drop("lemmatized")
+  .drop("lemmatized").repartition(18)
 
 val newsTokens = stopWordRemover.transform(tokenizer.transform(news))
   .drop("tokens")
   .drop("wordsCleaned")
 
 val vectorizeFit = countVectorizer.fit(newsTokens)
-val vectorizeTransform = vectorizeFit.transform(newsTokens).drop('filteredTokens)
+val vectorizeTransform = vectorizeFit.transform(newsTokens).drop('filteredTokens).repartition(18)
 val model = lda.fit(vectorizeTransform)
 val modelTransform = model.transform(vectorizeTransform)
   .withColumn("maxTopic", maxTopic($"topicDistribution")).drop('features).drop('url).drop('author)
 val normalized = norm.transform(modelTransform).drop('topicDistribution)
-val pcaFit = pca.fit(normalized).transform(normalized).drop('topicDistNorm)
+val pcaFit = pca.fit(normalized).transform(normalized)
 pcaFit.write.mode("append").json("s3://warren-datasets/news_analysis.jsonl")
 pcaFit.show(false)
 
