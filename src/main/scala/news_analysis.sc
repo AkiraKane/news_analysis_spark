@@ -45,18 +45,19 @@ val maxTopic = udf((topicVector: Vector) => {
 })
 
 val voxDateUdf = udf((dateString: String) => {
-  val date = if (dateString.endsWith("a") || dateString.endsWith("p")) {
-    val idioticFormat = DateTimeFormat.forPattern("MMM dd, yyyy, hh:mma").withLocale(Locale.ENGLISH)
-    idioticFormat.parseDateTime(dateString + "m")
-  } else if (dateString == "NULL") {
-    DateTime.now()
-  } else {
-    val sensibleFormat = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss").withLocale(Locale.ENGLISH)
-    sensibleFormat.parseDateTime(dateString)
-  }
-
-  val monthOffset = (date.getMonthOfYear - 1) % 3
-  date.minusMonths(monthOffset).toString("yyyy-MM")
+  try {
+    if (dateString.endsWith("a") || dateString.endsWith("p")) {
+      val idioticFormat = DateTimeFormat.forPattern("MMM dd, yyyy, hh:mma").withLocale(Locale.ENGLISH)
+      val date = idioticFormat.parseDateTime(dateString + "m")
+      val monthOffset = (date.getMonthOfYear - 1) % 3
+      date.minusMonths(monthOffset).toString("yyyy-MM")
+    } else {
+      val sensibleFormat = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss").withLocale(Locale.ENGLISH)
+      val date = sensibleFormat.parseDateTime(dateString)
+      val monthOffset = (date.getMonthOfYear - 1) % 3
+      date.minusMonths(monthOffset).toString("yyyy-MM")
+    }
+  } catch {case e: Exception => "NULL"}
 })
 
 val jezebelDateUdf = udf((dateString: String) => {
