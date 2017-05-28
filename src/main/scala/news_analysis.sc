@@ -31,7 +31,7 @@ val countVectorizer = new CountVectorizer()
   .setMinDF(3).setMinTF(2).setInputCol("filteredTokens").setOutputCol("features")
 val norm = new Normalizer().setInputCol("topicDistribution").setOutputCol("topicDistNorm")
 val pca = new PCA().setInputCol("topicDistNorm").setOutputCol("topics2d").setK(2)
-val lda = new LDA().setK(17).setMaxIter(10)
+val lda = new LDA().setK(17).setMaxIter(10).setDocConcentration(.2)
 // optimal number thus far: ~17
 
 val lemmatizer = udf((s: String) => {
@@ -68,14 +68,14 @@ val jezebelDateUdf = udf((dateString: String) => {
 })
 
 val vox = spark.read.option("charset", "ascii")
-  .json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/voxtest.jsonl")
+  .json("s3://warren-datasets/vox.jsonl")
   .withColumn("org", lit("vox"))
   .withColumn("dateParsed", voxDateUdf($"date"))
   .drop("date")
   .withColumnRenamed("dateParsed", "yearMonth")
 
 val jezebel = spark.read.option("charset", "ascii")
-  .json("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/jezebeltest.jsonl")
+  .json("s3://warren-datasets/jezebel.jsonl")
   .withColumn("org", lit("jezebel"))
   .withColumn("dateParsed", jezebelDateUdf($"date"))
   .drop("date")
@@ -90,7 +90,7 @@ val news = jezebel.union(vox)
   .withColumn("id", $"_id".getField("$oid"))
   .drop("_id")
   .withColumn("wordsCleaned", regexp_replace($"lemmatized", regexString, ""))
-  .drop("lemmatized").repartition(7)
+  .drop("lemmatized")
 
 val newsTokens = stopWordRemover.transform(tokenizer.transform(news))
   .drop("tokens")
@@ -103,15 +103,16 @@ val modelTransform = model.transform(vectorizeTransform)
   .withColumn("maxTopic", maxTopic($"topicDistribution")).drop('features).drop('url).drop('author)
 val normalized = norm.transform(modelTransform).drop('topicDistribution)
 val pcaFit = pca.fit(normalized).transform(normalized)
-//pcaFit.write.mode("append").json("s3://warren-datasets/news_analysis.jsonl")
+pcaFit.write.mode("append").json("s3://warren-datasets/news_analysis.jsonl")
 pcaFit.show(false)
+model.getDocConcentration
 
 def topicAccessor(vocabulary: Array[String]) =
   udf((indices: mutable.WrappedArray[Int]) => indices.map(i => vocabulary(i)))
 
-val topics = model.describeTopics()
+val topics = model.describeTopics(100)
   .drop("termWeights")
   .withColumn("terms", topicAccessor(vectorizeFit.vocabulary)($"termIndices"))
   .drop("termIndices")
-//topics.write.mode("append").json("s3://warren-datasets/news_topics.json")
+topics.write.mode("append").json("s3://warren-datasets/news_topics.json")
 topics.show(false)
