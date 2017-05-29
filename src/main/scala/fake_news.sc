@@ -1,17 +1,10 @@
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.ml.feature.{CountVectorizer, RegexTokenizer, StopWordsRemover}
 import org.apache.spark.sql.functions._
-import edu.stanford.nlp.simple.Document
-import org.apache.spark.sql.functions.udf
 import stanfordLemmatizer.StanfordLemmatizer
-import org.apache.spark.ml.Pipeline
-import scala.collection.JavaConversions._
-import scala.collection.mutable
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.{Pipeline, PipelineModel}
 import com.databricks.spark.csv
 import org.apache.spark.ml.param.Param
-import org.apache.spark.ml.util.DefaultParamsWritable
-import org.apache.spark.sql.types.StructType
 
 val spark = SparkSession
   .builder().master("local")
@@ -42,18 +35,36 @@ def pipeGen(inputCol: String, outputCol: String): Pipeline = {
     .setMinTF(2)
     .setInputCol("filteredTokens")
     .setOutputCol(outputCol)
-
   new Pipeline().setStages(Array(sl, tokenizer, stopWordRemover, countVectorizer))
 }
 
-val lemmatizer = udf((s: String) => {
-  try {
-    val doc = new Document(s)
-    doc.sentences().map(_.lemmas()).map(_.mkString(" ")).mkString(" ")
-  } catch {
-    case e: Exception => ""
+class Processor(dataFrame: DataFrame, titleColName: String, bodyColName: String) {
+  private val bodyPipe: Pipeline = pipeGen(bodyColName, bodyColName + "Matrix")
+  private val titlePipe: Pipeline = pipeGen(titleColName, titleColName + "Matrix")
+  val mainPipe: PipelineModel = new Pipeline().setStages(Array(bodyPipe, titlePipe)).fit(dataFrame)
+
+  private def pipeGen(inputCol: String, outputCol: String): Pipeline = {
+    val extraStopwords = Array("say", "would", "one", "make", "like", "get", "go", "also",
+      "could", "even", "use", "thing", "way", "see", "l", "var", "el", "")
+    val sl = new StanfordLemmatizer()
+      .setInputCol(inputCol)
+      .setOutputCol(inputCol + "Lemmatized")
+    val tokenizer = new RegexTokenizer()
+      .setInputCol(inputCol + "Lemmatized")
+      .setOutputCol(inputCol + "Tokens")
+    val stopWordRemover = new StopWordsRemover()
+      .setInputCol(inputCol + "Tokens")
+      .setOutputCol(inputCol + "FilteredTokens")
+    val stopWordsRemover = stopWordRemover
+      .setStopWords(stopWordRemover.getStopWords ++ extraStopwords)
+    val countVectorizer = new CountVectorizer()
+      .setMinDF(3)
+      .setMinTF(2)
+      .setInputCol(inputCol + "FilteredTokens")
+      .setOutputCol(outputCol)
+    new Pipeline().setStages(Array(sl, tokenizer, stopWordRemover, countVectorizer))
   }
-})
+}
 
 val articlePipe = pipeGen("body", "articleMatrix")
 val headlinePipe = pipeGen("headline", "headlineMatrix")
@@ -62,23 +73,15 @@ val bodies = spark.read.format("com.databricks.spark.csv")
   .option("header", "true")
   .option("inferSchema", "true")
   .load("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/fakenews_bodies.csv")
-//  .withColumn("article", lemmatizer($"articleBody"))
-//  .drop("articleBody")
-  .withColumnRenamed("Body Id", "id")
+  .withColumnRenamed("id", "bodyId")
 val stances = spark.read.format("com.databricks.spark.csv")
   .option("header", "true")
   .option("inferSchema", "true")
   .load("/Users/warren/Desktop/programming_projects/news_analysis_spark/data/fakenews_stances.csv")
-//  .withColumn("hlem", lemmatizer($"Headline"))
-//  .drop("Headline")
-//  .withColumnRenamed("hlem", "headline")
 
-//val df = bodies.join(stances, $"id" === $"Body Id")
-//  .drop("Body Id")
-//  .na.drop()
-//  .show(false)
+val df = bodies.join(stances, $"bodyId" === $"id")
+  .drop("Body Id")
+  .na.drop().repartition(7)
 
-val p = articlePipe.fit(bodies)
-
-p.transform(bodies).createOrReplaceTempView("p")
-sqlContext.sql("""SELECT * FROM p WHERE id = 5""").first()
+val p = new Processor(df, "headline", "body")
+p.mainPipe.transform(df).describe()
