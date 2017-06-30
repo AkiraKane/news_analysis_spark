@@ -1,16 +1,24 @@
+import org.apache.spark.sql.functions._
+import com.databricks.spark.corenlp.functions._
+import org.apache.spark.sql.SparkSession
 
+val spark = SparkSession
+  .builder().master("local")
+  .appName("Spark SQL basic example")
+  .config("master", "spark://myhost:7077")
+  .getOrCreate()
 
-import org.apache.spark.mllib.optimization.Gradient
+val sqlContext = spark.sqlContext
 
-def indexOfLargest(array: Seq[Int]) = {
-  val result = array.foldLeft(-1,Int.MinValue,0) {
-    case ((maxIndex, maxValue, currentIndex), currentValue) =>
-      if(currentValue > maxValue) (currentIndex,currentValue,currentIndex+1)
-      else (maxIndex,maxValue,currentIndex+1)
-  }
-  result._1
-}
+import sqlContext.implicits._
 
-val test = Vector(1,2,34)
+val input = Seq(
+  (1, "<xml>Stanford University is located in California. It is a great university.</xml>")
+).toDF("id", "text")
 
-test indexOf test.max
+val output = input
+  .select(cleanxml('text).as('doc))
+  .select(explode(ssplit('doc)).as('sen))
+  .select('sen, tokenize('sen).as('words), ner('sen).as('nerTags), sentiment('sen).as('sentiment))
+
+output.show(truncate = false)

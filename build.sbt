@@ -16,4 +16,4 @@ libraryDependencies ++= Seq(
 
 libraryDependencies += "edu.stanford.nlp" % "stanford-corenlp" % "3.7.0" withSources() withJavadoc()
 libraryDependencies += "edu.stanford.nlp" % "stanford-corenlp" % "3.7.0" classifier "models"
-libraryDependencies += "databricks" % "spark-corenlp" % "0.2.0-s_2.11"
+libraryDependencies += "databricks" % "spark-corenlp" % "0.2.0-s_2.10"
