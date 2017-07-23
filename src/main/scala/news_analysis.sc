@@ -14,6 +14,7 @@ val spark = SparkSession
   .builder().master("local")
   .appName("Spark SQL basic example")
   .config("master", "spark://myhost:7077")
+  .config("spark.default.parallelism", "85")
   .getOrCreate()
 
 val sqlContext = spark.sqlContext
@@ -68,14 +69,14 @@ val jezebelDateUdf = udf((dateString: String) => {
 })
 
 val vox = spark.read.option("charset", "ascii")
-  .json("s3://warren-datasets/vox.jsonl")
+  .parquet("s3://warren-datasets/vox.pqt")
   .withColumn("org", lit("vox"))
   .withColumn("dateParsed", voxDateUdf($"date"))
   .drop("date")
   .withColumnRenamed("dateParsed", "yearMonth")
 
 val jezebel = spark.read.option("charset", "ascii")
-  .json("s3://warren-datasets/jezebel.jsonl")
+  .parquet("s3://warren-datasets/jezebel.pqt")
   .withColumn("org", lit("jezebel"))
   .withColumn("dateParsed", jezebelDateUdf($"date"))
   .drop("date")
@@ -83,12 +84,13 @@ val jezebel = spark.read.option("charset", "ascii")
 
 val regexString ="""[\p{Punct}]|[^\x00-\x7F]|\s{2,}?|lrb|lcb|rcb|lsb|rsb|rrb"""
 val news = jezebel.union(vox)
+    .repartition(85)
   .withColumn("textNoHttp", regexp_replace($"text", """http.*\s$|document[a-z]+|Advertisement""", ""))
   .withColumn("lemmatized", lemmatizer($"textNoHttp"))
   .drop("textNoHttp")
   .drop("text")
-  .withColumn("id", $"_id".getField("$oid"))
-  .drop("_id")
+//  .withColumn("id", $"_id".getField("$oid"))
+//  .drop("_id")
   .withColumn("wordsCleaned", regexp_replace($"lemmatized", regexString, ""))
   .drop("lemmatized")
 
